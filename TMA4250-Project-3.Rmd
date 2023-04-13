@@ -7,7 +7,25 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+source("functions.R")
+
+library(ggplot2)
+library(tidyverse)
+library(rgdal)
+library(spdep)
+library(latex2exp)
+library(LaplacesDemon)
 ```
+
+# Geography data
+
+The data is loaded into the R environment as **nigeriaAdm1** and **nigeriaAdm2** respectively.
+```{r}
+load("data/Admin1Geography.RData")
+load("data/Admin2Geography.RData")
+```
+
 
 # Problem 1
 
@@ -23,6 +41,27 @@ knitr::opts_chunk$set(echo = TRUE)
 # Problem 2
 
 ## a)
+
+```{r}
+direct_estimates <- read.table(
+  "data/DirectEstimates.txt",
+  skip=1,
+  col.names=c("area_name", "obs", "stdev")
+) %>%
+  mutate(obs=invlogit(obs))
+
+
+plotAreaCol(
+  "figures/2a.jpg",
+  width=25,
+  height=20,
+  estVal=direct_estimates$obs,
+  geoMap=nigeriaAdm1,
+  leg=TeX("$\\hat{p}$")
+)
+```
+It is clear that there is a considerable amount of dependence between the various regions, and therefore borrowing strength in space to reduce uncertainty is indeed reasonable.
+
 
 ## b)
 
