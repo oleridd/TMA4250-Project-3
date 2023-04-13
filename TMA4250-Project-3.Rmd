@@ -1,0 +1,35 @@
+---
+title: "TMA4250-Project-3"
+author: "Ole Riddervold, Ole Kristian Skogly"
+date: "2023-04-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem 1
+
+## a)
+
+## b)
+
+## c)
+
+## d)
+
+
+# Problem 2
+
+## a)
+
+## b)
+
+## c)
+
+## d)
+
+## e)
+
+## f)
