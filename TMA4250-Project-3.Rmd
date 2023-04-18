@@ -7,26 +7,362 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(rgdal) 
+library(spdep)
+library(tibble)
+library(rgdal)
+library(spdep)
+library(base)
+library(boot)
+library(MASS)
+library(ggplot2)
+library(reshape2)
 ```
 
 # Problem 1
 
 ## a)
+```{r setup, include=FALSE}
+#Given function for coloring the map
 
+## plotAreaCol
+# This functions plots the values and saves the figure to the specified file.
+# It is advisable to not plot directly in R since it will take a long time.
+# The arguments are:
+#   fNamme: file name for saving figure
+#   width: width of figure in inches
+#   height: height of figure in inches
+#   estVal: the k values to be plotted on geoMap
+#   geoMap: the map containing k regions
+#   leg: name to use on top of legend
+#   colLim: control lower limit and upper limit of color scale (colLim = c(lowVal, highVal))
+plotAreaCol = function(fName, width, height, estVal, geoMap, leg, colLim = NULL){
+  if(is.null(colLim)){
+    colLim = range(estVal)
+  }
+  
+  # Set up data object for plotting
+  nigeriaMapTmp = geoMap
+  nigeriaMapTmp$MCV1 = estVal
+  nigeria.df = merge(fortify(nigeriaMapTmp), as.data.frame(nigeriaMapTmp), by.x = "id", by.y = 0)
+  nigeria.df$Longitude = nigeria.df$long
+  nigeria.df$Latitude  = nigeria.df$lat
+  
+  # Plot
+  map = ggplot() +
+    geom_polygon(data = nigeria.df,
+                 aes(x = Longitude, y = Latitude, group = group, fill = MCV1),
+                 color = 'gray', size = .2)+
+    scale_fill_viridis_c(direction = 1,
+                         begin = 1,
+                         end = 0,
+                         limit = colLim,
+                         name = leg) + 
+    coord_fixed() + 
+    theme(text = element_text(size=40),
+          legend.key.height = unit(4, 'cm'),
+          legend.key.width  = unit(1.75, 'cm'))
+  ggsave(filename = fName,
+         plot = map,
+         width = width, 
+         height = height)
+}
+
+
+
+
+##Problem 1a
+library(Matrix)
+setwd("/Users/olekristianskogly/Documents/Romlig stat/TMA4250Project3")
+# Load admin1 and admin2 neighborhood matrices
+load("Admin1Geography.RData")
+load("Admin2Geography.RData")
+
+Admin1Graph <- read.table("Admin1Graph.txt", sep="")
+Admin2Graph <- read.table("Admin2Graph.txt", sep="")
+
+#Precision matrix
+precisionMatrix <- function(M){
+  
+  # Compute number of neighbors for each node
+  n_Neighbour = colSums(M)
+  
+  # Construct the precision matrix up to scaling
+  R = -M
+  diag(R) = n_Neighbour
+  return(R)
+}
+
+#Define structure matrix R1
+R1 = precisionMatrix(Admin1Graph)
+
+#Define structure matrix R2
+R2 = precisionMatrix(Admin2Graph)
+
+#Calculate dimension and rank for R1
+dim(R1)
+qr(R1)$rank
+
+#Calculate dimension and rank for R2
+dim(R2)
+qr(R2)$rank
+
+# Compute proportion of non-zero elements
+prop_nonzero_R1 <- sum(R1 != 0)/length(R1)^2
+cat("The proportion of non-zero elements for R1:", prop_nonzero_R1)
+prop_nonzero_R2 <- sum(R2 != 0)/length(R2)^2
+cat("The proportion of non-zero elements for R2:", prop_nonzero_R2)
+
+# Display sparsity pattern for R1
+R1_dense <- as.matrix(R1)
+image(R1_dense, main = "Sparsity pattern for R1")
+
+# Display sparsity pattern for R2
+R2_dense <- as.matrix(R2)
+image(R2_dense, main = "Sparsity pattern for R2")
+
+# Convert R1 to long format
+R1_df <- melt(as.matrix(R1))
+
+# Plot the sparsity pattern using ggplot2
+ggplot(R1_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme_void()
+# Convert R2 to long format
+R2_df <- melt(as.matrix(R2))
+
+# Plot the sparsity pattern using ggplot2
+ggplot(R2_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme_void()
+
+##CODE FOR GETTING THE SPARSE MATRICES IN ONE PICTURE
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+# Convert R1 to long format
+R1_df <- melt(as.matrix(R1))
+# Plot the sparsity pattern for R1 using ggplot2
+p1 <- ggplot(R1_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black", name = "Value") + # added name argument
+  theme_void() +
+  labs(title = "Sparsity pattern for R1")
+# Convert R2 to long format
+R2_df <- melt(as.matrix(R2))
+# Plot the sparsity pattern for R2 using ggplot2
+p2 <- ggplot(R2_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black", name = "Value") + # added name argument
+  theme_void() +
+  labs(title = "Sparsity pattern for R2")
+# Arrange the two ggplots in one picture
+grid.arrange(p1, p2, ncol = 2)
+
+
+```
 ## b)
+```{r setup, include=FALSE}
+# Define a function for calculating first-order GMRF
+# Q is the precision matrix
+# epsilon is a small value added to the diagonal of Q for numerical stability
+firstOrder_GMRF <- function(Q, epsilon = 1e-10) {
+  n <- length(Q)
+  
+  # Add epsilon to the diagonal of Q for numerical stability
+  Q_thilde <- Q + epsilon * diag(n)
+  
+  # Compute the Cholesky decomposition of Q_thilde
+  L <- chol(Q_thilde)
+  
+  # Generate a vector of n random normal variables
+  z <- rnorm(n)
+  
+  # Solve the linear system L %*% v = z to obtain v
+  v <- solve(L) %*% z
+  
+  # Compute x by centering v around its mean
+  x <- v - mean(v) * rep(1, n)
+  
+  return(x)
+}
 
+set.seed(4250)
+# simulate data from the first-order GMRF using Admin1
+Admin1_Besagrealization1 <- firstOrder_GMRF(R1)
+Admin1_rnormrealization1 <- rnorm(nrow(R1))
+Admin1_Besagrealization2 <- firstOrder_GMRF(R1)
+Admin1_rnormrealization2 <- rnorm(nrow(R1))
+
+#The realizations on the Nigeria map of the Besag model on the admin1 and the normalization distribution
+plotAreaCol(fName="1bAdmin1_Besagrealization1tma4300.jpg",width = 11, height = 11, estVal= Admin1_Besagrealization1,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+plotAreaCol(fName="1bAdmin1_rnormrealization1tma4300.jpg",width = 11, height = 11, estVal= Admin1_rnormrealization1,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+plotAreaCol(fName="1bAdmin1_Besagrealization21tma4300.jpg",width = 11, height = 11, estVal= Admin1_Besagrealization2,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+plotAreaCol(fName="1bAdmin1_rnormrealization2tma4300.jpg",width = 11, height = 11, estVal= Admin1_rnormrealization2,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+
+
+```
 ## c)
+```{r setup, include=FALSE}
+set.seed(4250)
 
+# simulate data from the first-order GMRF using Admin2
+Admin2_Besagrealization1 <- firstOrder_GMRF(R2)
+Admin2_rnormrealization1 <- rnorm(nrow(R2))
+Admin2_Besagrealization2 <- firstOrder_GMRF(R2)
+Admin2_rnormrealization2 <- rnorm(nrow(R2))
+
+
+#The realizations on the Nigeria map of the Besag model on the admin1 and the normalization distribution
+plotAreaCol(fName="1cAdmin2_Besagrealization1tma4300.jpg",width = 11, height = 11, estVal= Admin2_Besagrealization1,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4)) 
+plotAreaCol(fName="1cAdmin2_rnormrealization1tma4300.jpg",width = 11, height = 11, estVal= Admin2_rnormrealization1 ,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4) )
+plotAreaCol(fName="1cAdmin2_Besagrealization21tma4300.jpg",width = 11, height = 11, estVal= Admin2_Besagrealization2,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4) )
+plotAreaCol(fName="1cAdmin2_rnormrealization2tma4300.jpg",width = 11, height = 11, estVal= Admin2_rnormrealization2,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4) )
+
+
+
+```
 ## d)
+```{r setup, include=FALSE}
+set.seed(4250)
+# Set the number of realizations to generate
+n_realizations <- 100
+
+# Create an empty matrix to store the simulated data
+simulate100_Admin2 <- matrix(NA_real_, nrow = nrow(R2), ncol = n_realizations)
+
+# Loop over the number of realizations and simulate data
+for (i in 1:n_realizations) {
+  simulate100_Admin2[, i] <- firstOrder_GMRF(R2)
+}
+
+# Compute the empirical marginal variance for each admin2 area
+margVAR_100 <- apply(simulate100_Admin2, 1, var)
+
+Varmax <- ceiling(max(margVAR_100 ))
+
+#Display the var on the map
+plotAreaCol(fName="1dAdmin2margvartma4300.jpg",width = 11, height = 11, estVal= margVAR_100,geoMap=nigeriaAdm2, leg="var", colLim = c(0,Varmax))
+
+correlations <- rep(NA_real_, nrow(simulate100_Admin2))
+for (i in 1:775){
+  correlations[i] <- cor(simulate100_Admin2[150,], simulate100_Admin2[i,])
+  
+}
+
+#Display the cor on the map
+plotAreaCol(fName="1dAdmin2cortma4300.jpg",width = 11, height = 11, estVal= correlations,geoMap=nigeriaAdm2, leg="cor", colLim = range(correlations))
 
 
+```
 # Problem 2
 
 ## a)
+```{r setup, include=FALSE}
+#read the DirectEstimates file
+DirectEstimates <- read.csv("DirectEstimates.txt", sep="")
+
+# Define the inverse logit function
+# x: the input vector or scalar
+# Returns: the output of the inverse logit function
+
+inverseLogit <- function(x) {
+  exp_x <- exp(-x)
+  1/(1 + exp_x)
+}
+
+# Compute the observed proportions using the inverse logit function on the observations
+# admin1$Observation: a vector of observations
+# obsProportions: a vector of computed proportions
+obsProportions <- inverseLogit(DirectEstimates$Observation)
+
+#Display the observed proportions on the Nigeria map
+plotAreaCol(fName="2aObsproportions4300.jpg",width = 10, height = 11, estVal= obsProportions,geoMap=nigeriaAdm1, leg="p", colLim = c(0,1))
+
+
+```
 
 ## b)
+```{r setup, include=FALSE}
+#Observation vector
+y <- DirectEstimates$Observation
+
+#Vector for the known variance V_1,...,V_37
+varians_vec <- DirectEstimates$StdDev^2
+
+#Compute the covariance matrix
+#CovMatrix <- diag(varians_vec)
+
+
+sigma2 <- 100^2
+
+
+# Define mu and covariance matrix for X|Y
+mu <- solve((1/sigma2)*diag(length(y))+diag(1/varians_vec))%*%(diag(1/varians_vec)%*%y)
+cov <- solve((1/sigma2) * diag(length(y)) + diag(1/varians_vec))
+
+# Simulate 100 samples of Pa|Y=y
+set.seed(123)
+Xsamples <- mvrnorm(100, mu = mu, Sigma = cov)
+Psamples <- inverseLogit(Xsamples)
+
+
+# Compute the median and the coefficient of variation for Pa|Y = y 
+#empirically based on 100 samples
+MedianP <- apply(Psamples, 2, median)
+coefficientVariationP <- apply(Psamples, 2, sd) / apply(Psamples, 2, mean)
+
+#The computed median of variation for Pa|Y = y empirically based on 100 samples
+MedianP
+#The computed coefficient of variation for Pa|Y = y empirically based on 100 samples
+coefficientVariationP
+
+#Display the median on the Nigeria map
+plotAreaCol(fName="2bMedianP4300.jpg",width = 10, height = 11, estVal= MedianP,geoMap=nigeriaAdm1, leg="median", colLim = c(0,1))
+#Display the coefficient of variation for Pa|Y = y on the Nigeria map
+plotAreaCol(fName="2bcoefficientVariationP4300.jpg",width = 10, height = 11, estVal= coefficientVariationP,geoMap=nigeriaAdm1, leg="CV", colLim = c(0,1))
+
+
+```
 
 ## c)
+```{r setup, include=FALSE}
+# Define function for parameter update
+UpdateParameters <- function(tau, varians_vec, R1, y){
+  Q <- diag(1/varians_vec)
+  Q_thilde <- tau*R1 + Q
+  mu_thilde <- solve(Q_thilde) %*% Q %*% y
+  return(list(mu = mu_thilde, Q = Q_thilde))
+}
+
+# Compute updated parameters
+UpdateParam <- UpdateParameters(1, varians_vec, R1, y)
+
+#Update xSample
+UpdateXsample <- mvrnorm(100, mu = UpdateParam$mu, Sigma = solve(UpdateParam$Q))
+
+#Update pSample
+UpdatePsample <- inverseLogit(UpdateXsample)
+
+# Compute the median and the coefficient of variation for Pa|Y = y 
+#empirically based on 100 samples
+MedianP2 <- apply(UpdatePsample, 2, median)
+coefficientVariationP2 <- apply(UpdatePsample, 2, sd) / apply(UpdatePsample, 2, mean)
+
+#The computed median of variation for Pa|Y = y empirically based on 100 samples
+MedianP2
+#The computed coefficient oof variation for Pa|Y = y empirically based on 100 samples
+coefficientVariationP2
+
+#Display the median on the Nigeria map
+plotAreaCol(fName="2cMedianP4300.jpg",width = 10, height = 11, estVal= MedianP2,geoMap=nigeriaAdm1, leg="median", colLim = c(0,1))
+#Display the coefficient of variation for Pa|Y = y on the Nigeria map
+plotAreaCol(fName="2ccoefficientVariationP4300.jpg",width = 10, height = 11, estVal= coefficientVariationP2,geoMap=nigeriaAdm1, leg="CV", colLim = c(0,1))
+
+
+```
 
 ## d)
 
