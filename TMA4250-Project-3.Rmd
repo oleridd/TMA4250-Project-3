@@ -73,10 +73,9 @@ plotAreaCol = function(fName, width, height, estVal, geoMap, leg, colLim = NULL)
 
 ##Problem 1a
 library(Matrix)
-setwd("/Users/olekristianskogly/Documents/Romlig stat/TMA4250Project3")
 # Load admin1 and admin2 neighborhood matrices
-load("Admin1Geography.RData")
-load("Admin2Geography.RData")
+load("data/Admin1Geography.RData")
+load("data/Admin2Geography.RData")
 
 Admin1Graph <- read.table("Admin1Graph.txt", sep="")
 Admin2Graph <- read.table("Admin2Graph.txt", sep="")
@@ -262,7 +261,7 @@ plotAreaCol(fName="1dAdmin2cortma4300.jpg",width = 11, height = 11, estVal= corr
 ## a)
 ```{r setup, include=FALSE}
 #read the DirectEstimates file
-DirectEstimates <- read.csv("DirectEstimates.txt", sep="")
+DirectEstimates <- read.csv("data/DirectEstimates.txt", sep="")
 
 # Define the inverse logit function
 # x: the input vector or scalar
@@ -302,6 +301,12 @@ sigma2 <- 100^2
 # Define mu and covariance matrix for X|Y
 mu <- solve((1/sigma2)*diag(length(y))+diag(1/varians_vec))%*%(diag(1/varians_vec)%*%y)
 cov <- solve((1/sigma2) * diag(length(y)) + diag(1/varians_vec))
+
+mu.2 <- (sigma2/(varians_vec + sigma2))*y
+norm(mu-mu.2)
+
+cov.2 <- diag(varians_vec*sigma2/(varians_vec+sigma2))
+norm(cov-cov.2)
 
 # Simulate 100 samples of Pa|Y=y
 set.seed(123)
