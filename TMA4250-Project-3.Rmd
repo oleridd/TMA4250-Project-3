@@ -11,11 +11,15 @@ knitr::opts_chunk$set(echo = TRUE)
 source("functions.R")
 
 library(ggplot2)
+library(patchwork)
 library(tidyverse)
 library(rgdal)
 library(spdep)
 library(latex2exp)
 library(LaplacesDemon)
+library(pracma)
+library(MASS)
+library(reshape2)
 ```
 
 # Geography data
@@ -64,8 +68,59 @@ It is clear that there is a considerable amount of dependence between the variou
 
 
 ## b)
+### Calculating the parameters for posterior distribution
+```{r}
+# Treating data:
+y <- direct_estimates$obs
+D <- diag(direct_estimates$stdev)
+n <- length(y)
+sigma_squared <- 100^2
+
+# Posterior distribution parameters:
+simple.Sigma <- solve( solve(D) + (1/sigma_squared)*identity(n) )
+simple.mu    <- simple.Sigma %*% solve(D) %*% y
+```
+
+### Empirical estimation of median and standard deviation 
+We wish to do an empirical estimation of the median and standard deviation of $P_a | Y_a=y_a, \: a\in \{1, \cdots, n\}$
+```{r}
+simple.samples <- sigmoid(mvrnorm(simple.mu, simple.Sigma, n=100))
+
+simple.sum <- simple.samples %>%
+  melt(varnames=c("sample", "a")) %>%
+  group_by(a) %>%
+  summarise(median.est=median(value), std.est=std(value))
+```
+Plotting:
+```{r}
+plotAreaCol(
+  "figures/2b_median.jpg",
+  width=25,
+  height=20,
+  estVal=simple.sum$median.est,
+  geoMap=nigeriaAdm1,
+  leg="median est."
+)
+
+plotAreaCol(
+  "figures/2b_std.jpg",
+  width=25,
+  height=20,
+  estVal=simple.sum$std.est,
+  geoMap=nigeriaAdm1,
+  leg=TeX("$\\hat{\\sigma^2}$")
+)
+```
+
 
 ## c)
+```{r}
+tau <- 1.0
+
+# Posterior distribution parameters:
+besag.Sigma <- solv
+```
+
 
 ## d)
 
