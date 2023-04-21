@@ -20,6 +20,7 @@ library(LaplacesDemon)
 library(pracma)
 library(MASS)
 library(reshape2)
+library(igraph)
 ```
 
 # Geography data
@@ -115,7 +116,9 @@ plotAreaCol(
 
 ## c)
 ```{r}
+G <- read.graph("data/Admin1Graph.txt", format="graphdb")
 tau <- 1.0
+
 
 # Posterior distribution parameters:
 besag.Sigma <- solv
