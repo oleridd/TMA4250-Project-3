@@ -204,15 +204,16 @@ evaluate_updated_besag_and_plot <- function(tau, update, filenames) {
   #and summarises, and finally plots the data. Relevant for task c and e.
   # Args:
   #   tau               (float): Besag hyperparameter
-  #   update            (float): The new observation
+  #   update             (list): Observation and variance of update
   #   filenames (length-2 list): Filenames of plots
   # Returns:
   #   None
   # Posterior distribution parameters:
   A <- diag(1, nrow=38, ncol=37)
   A[38, 19] <- 1
-  besag.Sigma <- solve(tau*R + A%*%D.inv%*%t(A))
-  besag.mu <- besag.Sigma %*% A %*% D.inv %*% c(y, update)
+  D.tilde.inv <- diag(c(direct_estimates$stdev, update$var)) %>% solve()
+  besag.Sigma <- solve(tau*R + t(A)%*%D.tilde.inv%*%A)
+  besag.mu <- besag.Sigma %*% t(A) %*% D.tilde.inv %*% y
   
   # Sampling from the distribution
   besag.samples <- sigmoid(mvrnorm(besag.mu, besag.Sigma, n=100))
@@ -241,8 +242,8 @@ evaluate_updated_besag_and_plot <- function(tau, update, filenames) {
 ```{r}
 A <- diag(1, nrow=38, ncol=37)
 A[38, 19] <- 1
-dim(t(A)%*%D.inv%*%A)
-besag.Sigma <- tau*R + t(A)%*%D.inv%*%A
+D.tilde.inv <- diag(c(direct_estimates$stdev, 0.1^2)) %>% solve()
+besag.Sigma <- tau*R + t(A)%*%D.tilde.inv%*%A
 ```
 TODO: NEED TO CHANGE R AS WELL
 
