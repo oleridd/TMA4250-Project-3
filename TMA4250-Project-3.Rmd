@@ -57,8 +57,8 @@ direct_estimates <- read.table(
 
 plotAreaCol(
   "figures/2a.jpg",
-  width=25,
-  height=20,
+  width=20,
+  height=15,
   estVal=invlogit(direct_estimates$obs),
   geoMap=nigeriaAdm1,
   leg=TeX("$\\hat{p}$")
@@ -96,7 +96,7 @@ realization_summary <- function(realizations) {
     realizations %>%
       melt(varnames=c("sample", "a")) %>%
       group_by(a) %>%
-      summarise(median.est=median(value), std.est=std(value))
+      summarise(median.est=median(value), std.est=std(value)/mean(value))
   )
 }
 ```
@@ -109,8 +109,8 @@ Plotting:
 ```{r}
 plotAreaCol(
   "figures/2b_median.jpg",
-  width=25,
-  height=20,
+  width=20,
+  height=15,
   estVal=simple.sum$median.est,
   geoMap=nigeriaAdm1,
   leg="median est."
@@ -118,23 +118,16 @@ plotAreaCol(
 
 plotAreaCol(
   "figures/2b_std.jpg",
-  width=25,
-  height=20,
+  width=20,
+  height=15,
   estVal=simple.sum$std.est,
   geoMap=nigeriaAdm1,
-  leg=TeX("$\\hat{\\sigma}$")
+  leg=TeX("$\\hat{CV}$")
 )
 ```
 
 
 ## c)
-Reading the graph and generating the structure matrix:
-```{r}
-G <- read.table("data/Admin1Graph.txt") %>% as.matrix()
-R <- generate_structure_matrix(G)
-```
-
-
 ### Helper function to generate structure matrix:
 ```{r}
 generate_structure_matrix <- function(G) {
@@ -150,6 +143,14 @@ generate_structure_matrix <- function(G) {
 }
 ```
 
+
+Reading the graph and generating the structure matrix:
+```{r}
+G <- read.table("data/Admin1Graph.txt") %>% as.matrix()
+R <- generate_structure_matrix(G)
+```
+
+
 ### Execution:
 ```{r}
 evaluate_besag_and_plot <- function(tau, filenames) {
@@ -159,7 +160,7 @@ evaluate_besag_and_plot <- function(tau, filenames) {
   #   tau               (float): Besag hyperparameter
   #   filenames (length-2 list): Filenames of plots
   # Returns:
-  #   None
+  #   Model summary
   # Posterior distribution parameters:
   besag.Sigma <- solve(tau*R + D.inv)
   besag.mu <- besag.Sigma %*% D.inv %*% y
@@ -170,8 +171,8 @@ evaluate_besag_and_plot <- function(tau, filenames) {
   
   plotAreaCol(
     filenames[1],
-    width=25,
-    height=20,
+    width=20,
+    height=15,
     estVal=besag.sum$median.est,
     geoMap=nigeriaAdm1,
     leg="median est."
@@ -179,17 +180,19 @@ evaluate_besag_and_plot <- function(tau, filenames) {
   
   plotAreaCol(
     filenames[2],
-    width=25,
-    height=20,
+    width=20,
+    height=15,
     estVal=besag.sum$std.est,
     geoMap=nigeriaAdm1,
-    leg=TeX("$\\hat{\\sigma}$")
+    leg=TeX("$\\hat{CV}$")
   )
+  
+  return(besag.sum)
 }
 ```
 
 ```{r}
-evaluate_besag_and_plot(
+besag_orig.sum <- evaluate_besag_and_plot(
   tau=1.0,
   filenames=c("figures/2c_median.jpg", "figures/2c_std.jpg")
 )
@@ -207,13 +210,13 @@ evaluate_updated_besag_and_plot <- function(tau, update, filenames) {
   #   update             (list): Observation and variance of update
   #   filenames (length-2 list): Filenames of plots
   # Returns:
-  #   None
+  #   Model summary
   # Posterior distribution parameters:
   A <- diag(1, nrow=38, ncol=37)
   A[38, 19] <- 1
   D.tilde.inv <- diag(c(direct_estimates$stdev, update$var)) %>% solve()
   besag.Sigma <- solve(tau*R + t(A)%*%D.tilde.inv%*%A)
-  besag.mu <- besag.Sigma %*% t(A) %*% D.tilde.inv %*% y
+  besag.mu <- besag.Sigma %*% t(A) %*% D.tilde.inv %*% c(y, update$obs)
   
   # Sampling from the distribution
   besag.samples <- sigmoid(mvrnorm(besag.mu, besag.Sigma, n=100))
@@ -221,8 +224,8 @@ evaluate_updated_besag_and_plot <- function(tau, update, filenames) {
   
   plotAreaCol(
     filenames[1],
-    width=25,
-    height=20,
+    width=20,
+    height=15,
     estVal=besag.sum$median.est,
     geoMap=nigeriaAdm1,
     leg="median est."
@@ -230,29 +233,42 @@ evaluate_updated_besag_and_plot <- function(tau, update, filenames) {
   
   plotAreaCol(
     filenames[2],
-    width=25,
-    height=20,
+    width=20,
+    height=15,
     estVal=besag.sum$std.est,
     geoMap=nigeriaAdm1,
-    leg=TeX("$\\hat{\\sigma}$")
+    leg=TeX("$\\hat{CV}$")
   )
+
+  return(besag.sum)
 }
 ```
 
-```{r}
-A <- diag(1, nrow=38, ncol=37)
-A[38, 19] <- 1
-D.tilde.inv <- diag(c(direct_estimates$stdev, 0.1^2)) %>% solve()
-besag.Sigma <- tau*R + t(A)%*%D.tilde.inv%*%A
-```
-TODO: NEED TO CHANGE R AS WELL
-
 
 ```{r}
-evaluate_updated_besag_and_plot(
+besag_updated.sum <- evaluate_updated_besag_and_plot(
   tau=1.0,
-  update=0.5,
+  update=list(obs=0.5, var=0.1^2),
   filenames=c("figures/2d_median.jpg", "figures/2d_std.jpg")
+)
+```
+```{r}
+plotAreaCol(
+  "figures/2d_median_diff.jpg",
+  width=20,
+  height=15,
+  estVal=besag_updated.sum$median.est - besag_orig.sum$median.est,
+  geoMap=nigeriaAdm1,
+  leg=TeX("median.diff")
+)
+
+plotAreaCol(
+  "figures/2d_std_diff.jpg",
+  width=20,
+  height=15,
+  estVal=besag_updated.sum$std.est - besag_orig.sum$std.est,
+  geoMap=nigeriaAdm1,
+  leg=TeX("CV.diff")
 )
 ```
 
@@ -301,7 +317,7 @@ mu_C <- function(Q_C) {
   # Returns:
   #   mu_C (length-n list)
   return(
-    Q_C %*% D.inv %*% y
+    solve(Q_C) %*% D.inv %*% y
   )
 }
 
@@ -322,10 +338,16 @@ log_likelihood <- function(tau) {
 ```
 
 ```{r}
-tau_hat <- optimize(log_likelihood, interval=c(0, 10000), maximum=TRUE)
+tau_hat <- optimize(log_likelihood, interval=c(0, 10000), maximum=TRUE)$maximum
 ```
 
 ```{r}
 tau_hat
 ```
 
+```{r}
+evaluate_besag_and_plot(
+  tau=tau_hat,
+  filenames=c("figures/2f_median.jpg", "figures/2f_std.jpg")
+)
+```
