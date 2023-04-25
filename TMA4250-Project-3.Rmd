@@ -1,7 +1,7 @@
 ---
 title: "TMA4250-Project-3"
 author: "Ole Riddervold, Ole Kristian Skogly"
-date: "2023-04-13"
+date: "2023-04-13" 
 output: pdf_document
 ---
 
@@ -162,6 +162,7 @@ p2 <- ggplot(R2_df, aes(x = Var2, y = Var1, fill = value)) +
 grid.arrange(p1, p2, ncol = 2)
 
 
+
 ```
 ## b)
 ```{r setup, include=FALSE}
@@ -240,8 +241,11 @@ for (i in 1:n_realizations) {
 
 # Compute the empirical marginal variance for each admin2 area
 margVAR_100 <- apply(simulate100_Admin2, 1, var)
+#margVAR_100
 
 Varmax <- ceiling(max(margVAR_100 ))
+#Varmax
+
 
 #Display the var on the map
 plotAreaCol(fName="1dAdmin2margvartma4300.jpg",width = 11, height = 11, estVal= margVAR_100,geoMap=nigeriaAdm2, leg="var", colLim = c(0,Varmax))
@@ -252,9 +256,10 @@ for (i in 1:775){
   
 }
 
+#Display the cov on the map
+plotAreaCol(fName="1dAdmin2covtma4300.jpg",width = 11, height = 11, estVal= correlations,geoMap=nigeriaAdm2, leg="cov", colLim = range(correlations))
 #Display the cor on the map
 plotAreaCol(fName="1dAdmin2cortma4300.jpg",width = 11, height = 11, estVal= correlations,geoMap=nigeriaAdm2, leg="cor", colLim = range(correlations))
-
 
 ```
 # Problem 2
