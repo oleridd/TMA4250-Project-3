@@ -1,0 +1,522 @@
+---
+title: "TMA4250-Project-3"
+date: "2023-04-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+source("functions.R")
+
+library(ggplot2)
+library(patchwork)
+library(tidyverse)
+library(rgdal)
+library(spdep)
+library(latex2exp)
+library(LaplacesDemon)
+library(pracma)
+library(MASS)
+library(reshape2)
+library(igraph)
+library(Matrix)
+```
+
+# Geography data
+
+The data is loaded into the R environment as **nigeriaAdm1** and **nigeriaAdm2** respectively.
+```{r}
+load("data/Admin1Geography.RData")
+load("data/Admin2Geography.RData")
+```
+
+
+## a)
+```{r}
+
+# Load admin1 and admin2 neighborhood matrices
+
+Admin1Graph <- read.table("data/Admin1Graph.txt", sep="")
+Admin2Graph <- read.table("data/Admin2Graph.txt", sep="")
+
+#Precision matrix
+precisionMatrix <- function(M){
+  
+  # Compute number of neighbors for each node
+  n_Neighbour = colSums(M)
+  
+  # Construct the precision matrix up to scaling
+  R = -M
+  diag(R) = n_Neighbour
+  return(R)
+}
+
+#Define structure matrix R1
+R1 = precisionMatrix(Admin1Graph)
+
+#Define structure matrix R2
+R2 = precisionMatrix(Admin2Graph)
+
+#Calculate dimension and rank for R1
+dim(R1)
+qr(R1)$rank
+
+#Calculate dimension and rank for R2
+dim(R2)
+qr(R2)$rank
+
+# Compute proportion of non-zero elements
+prop_nonzero_R1 <- sum(R1 != 0)/length(R1)^2
+cat("The proportion of non-zero elements for R1:", prop_nonzero_R1)
+prop_nonzero_R2 <- sum(R2 != 0)/length(R2)^2
+cat("The proportion of non-zero elements for R2:", prop_nonzero_R2)
+
+# Display sparsity pattern for R1
+R1_dense <- as.matrix(R1)
+image(R1_dense, main = "Sparsity pattern for R1")
+
+# Display sparsity pattern for R2
+R2_dense <- as.matrix(R2)
+image(R2_dense, main = "Sparsity pattern for R2")
+
+# Convert R1 to long format
+R1_df <- melt(as.matrix(R1))
+
+# Plot the sparsity pattern using ggplot2
+ggplot(R1_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme_void()
+# Convert R2 to long format
+R2_df <- melt(as.matrix(R2))
+
+# Plot the sparsity pattern using ggplot2
+ggplot(R2_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black") +
+  theme_void()
+
+##CODE FOR GETTING THE SPARSE MATRICES IN ONE PICTURE
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+# Convert R1 to long format
+R1_df <- melt(as.matrix(R1))
+# Plot the sparsity pattern for R1 using ggplot2
+p1 <- ggplot(R1_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black", name = "Value") + # added name argument
+  theme_void() +
+  labs(title = "Sparsity pattern for R1")
+# Convert R2 to long format
+R2_df <- melt(as.matrix(R2))
+# Plot the sparsity pattern for R2 using ggplot2
+p2 <- ggplot(R2_df, aes(x = Var2, y = Var1, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "black", name = "Value") + # added name argument
+  theme_void() +
+  labs(title = "Sparsity pattern for R2")
+# Arrange the two ggplots in one picture
+grid.arrange(p1, p2, ncol = 2)
+```
+
+## b)
+```{r}
+# Define a function for calculating first-order GMRF
+# Q is the precision matrix
+# epsilon is a small value added to the diagonal of Q for numerical stability
+firstOrder_GMRF <- function(Q, epsilon = 1e-10) {
+  n <- length(Q)
+  
+  # Add epsilon to the diagonal of Q for numerical stability
+  Q_thilde <- Q + epsilon * diag(n)
+  
+  # Compute the Cholesky decomposition of Q_thilde
+  L <- chol(Q_thilde)
+  
+  # Generate a vector of n random normal variables
+  z <- rnorm(n)
+  
+  # Solve the linear system L %*% v = z to obtain v
+  v <- solve(L) %*% z
+  
+  # Compute x by centering v around its mean
+  x <- v - mean(v) * rep(1, n)
+  
+  return(x)
+}
+
+set.seed(4250)
+# simulate data from the first-order GMRF using Admin1
+Admin1_Besagrealization1 <- firstOrder_GMRF(R1)
+Admin1_rnormrealization1 <- rnorm(nrow(R1))
+Admin1_Besagrealization2 <- firstOrder_GMRF(R1)
+Admin1_rnormrealization2 <- rnorm(nrow(R1))
+
+#The realizations on the Nigeria map of the Besag model on the admin1 and the normalization distribution
+plotAreaCol(fName="figures/1b_Besag1.jpg",width = 20, height = 15, estVal= Admin1_Besagrealization1,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+plotAreaCol(fName="figures/1b_rnormreal1.jpg",width = 20, height = 15, estVal= Admin1_rnormrealization1,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+plotAreaCol(fName="figures/1b_Besag2.jpg",width = 20, height = 15, estVal= Admin1_Besagrealization2,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+plotAreaCol(fName="figures/1b_normreal2.jpg",width = 20, height = 15, estVal= Admin1_rnormrealization2,geoMap=nigeriaAdm1, leg=expression(x), colLim = c(-3,3))
+
+
+```
+## c)
+```{r}
+set.seed(4250)
+
+# simulate data from the first-order GMRF using Admin2
+Admin2_Besagrealization1 <- firstOrder_GMRF(R2)
+Admin2_rnormrealization1 <- rnorm(nrow(R2))
+Admin2_Besagrealization2 <- firstOrder_GMRF(R2)
+Admin2_rnormrealization2 <- rnorm(nrow(R2))
+
+
+#The realizations on the Nigeria map of the Besag model on the admin1 and the normalization distribution
+plotAreaCol(fName="figures/1c_Besag1.jpg",width = 20, height = 15, estVal= Admin2_Besagrealization1,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4)) 
+plotAreaCol(fName="figures/1c_rnormreal1.jpg",width = 20, height = 15, estVal= Admin2_rnormrealization1 ,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4) )
+plotAreaCol(fName="figures/1c_Besag2.jpg",width = 20, height = 15, estVal= Admin2_Besagrealization2,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4) )
+plotAreaCol(fName="figures/1c_rnormreal2.jpg",width = 20, height = 15, estVal= Admin2_rnormrealization2,geoMap=nigeriaAdm2, leg=expression(x), colLim = c(-4,4) )
+
+
+
+```
+## d)
+```{r}
+set.seed(4250)
+# Set the number of realizations to generate
+n_realizations <- 100
+
+# Create an empty matrix to store the simulated data
+simulate100_Admin2 <- matrix(NA_real_, nrow = nrow(R2), ncol = n_realizations)
+
+# Loop over the number of realizations and simulate data
+for (i in 1:n_realizations) {
+  simulate100_Admin2[, i] <- firstOrder_GMRF(R2)
+}
+
+# Compute the empirical marginal variance for each admin2 area
+margVAR_100 <- apply(simulate100_Admin2, 1, var)
+#margVAR_100
+
+Varmax <- ceiling(max(margVAR_100 ))
+#Varmax
+
+
+#Display the var on the map
+plotAreaCol(fName="figures/1d_margvar.jpg",width = 20, height = 15, estVal= margVAR_100,geoMap=nigeriaAdm2, leg="var", colLim = c(0,Varmax))
+
+correlations <- rep(NA_real_, nrow(simulate100_Admin2))
+for (i in 1:775){
+  correlations[i] <- cor(simulate100_Admin2[150,], simulate100_Admin2[i,])
+  
+}
+
+#Display the cov on the map
+plotAreaCol(fName="figures/1d_cov.jpg",width = 20, height = 15, estVal= correlations,geoMap=nigeriaAdm2, leg="cov", colLim = range(correlations))
+#Display the cor on the map
+plotAreaCol(fName="figures/1d_cor.jpg",width = 20, height = 15, estVal= correlations,geoMap=nigeriaAdm2, leg="cor", colLim = range(correlations))
+
+```
+
+
+# Problem 2
+
+## a)
+
+```{r}
+direct_estimates <- read.table(
+  "data/DirectEstimates.txt",
+  skip=1,
+  col.names=c("area_name", "obs", "stdev")
+)
+
+
+plotAreaCol(
+  "figures/2a.jpg",
+  width=20,
+  height=15,
+  estVal=invlogit(direct_estimates$obs),
+  geoMap=nigeriaAdm1,
+  leg=TeX("$\\hat{p}$")
+)
+```
+
+
+## b)
+### Calculating the parameters for posterior distribution
+```{r}
+# Treating data:
+y <- direct_estimates$obs
+D <- diag(direct_estimates$stdev)
+D.inv <- solve(D)
+n <- length(y)
+sigma_squared <- 100^2
+
+# Posterior distribution parameters:
+simple.Sigma <- solve( D.inv + (1/sigma_squared)*identity(n) )
+simple.mu    <- simple.Sigma %*% D.inv %*% y
+```
+
+### Empirical estimation of median and standard deviation 
+```{r}
+realization_summary <- function(realizations) {
+  # Given a (kxn) array of realizations for many observations,
+  # calculates the meadian and standard deviation for each realization.
+  # Args:
+  #   realizations ((kxn) array): Array of k realizations of n variables
+  # Returns:
+  #   Dataframe with n rows containing median and std.
+  return(
+    realizations %>%
+      melt(varnames=c("sample", "a")) %>%
+      group_by(a) %>%
+      summarise(median.est=median(value), std.est=std(value)/mean(value))
+  )
+}
+```
+
+```{r}
+simple.samples <- sigmoid(mvrnorm(simple.mu, simple.Sigma, n=100))
+simple.sum <- realization_summary(simple.samples)
+```
+Plotting:
+```{r}
+plotAreaCol(
+  "figures/2b_median.jpg",
+  width=20,
+  height=15,
+  estVal=simple.sum$median.est,
+  geoMap=nigeriaAdm1,
+  leg="median est."
+)
+
+plotAreaCol(
+  "figures/2b_std.jpg",
+  width=20,
+  height=15,
+  estVal=simple.sum$std.est,
+  geoMap=nigeriaAdm1,
+  leg=TeX("$\\hat{CV}$")
+)
+```
+
+
+## c)
+### Helper function to generate structure matrix:
+```{r}
+generate_structure_matrix <- function(G) {
+  # Generates the structure matrix of a Besag model based
+  # on the graph G.
+  # Args:
+  #   G ((nxn) matrix): Matrix representation of G
+  # Returns:
+  #   (nxn) structure matrix
+  R <- -G
+  diag(R) <- colSums(t(G))
+  return(R)
+}
+```
+
+
+Reading the graph and generating the structure matrix:
+```{r}
+G <- read.table("data/Admin1Graph.txt") %>% as.matrix()
+R <- generate_structure_matrix(G)
+```
+
+
+### Execution:
+```{r}
+evaluate_besag_and_plot <- function(tau, filenames) {
+  # Evaluates the besag posterior, samples and summarises, and
+  # finally plots the data. Relevant for task c and e.
+  # Args:
+  #   tau               (float): Besag hyperparameter
+  #   filenames (length-2 list): Filenames of plots
+  # Returns:
+  #   Model summary
+  # Posterior distribution parameters:
+  besag.Sigma <- solve(tau*R + D.inv)
+  besag.mu <- besag.Sigma %*% D.inv %*% y
+  
+  # Sampling from the distribution
+  besag.samples <- sigmoid(mvrnorm(besag.mu, besag.Sigma, n=100))
+  besag.sum <- realization_summary(besag.samples)
+  
+  plotAreaCol(
+    filenames[1],
+    width=20,
+    height=15,
+    estVal=besag.sum$median.est,
+    geoMap=nigeriaAdm1,
+    leg="median est."
+  )
+  
+  plotAreaCol(
+    filenames[2],
+    width=20,
+    height=15,
+    estVal=besag.sum$std.est,
+    geoMap=nigeriaAdm1,
+    leg=TeX("$\\hat{CV}$")
+  )
+  
+  return(besag.sum)
+}
+```
+
+```{r}
+besag_orig.sum <- evaluate_besag_and_plot(
+  tau=1.0,
+  filenames=c("figures/2c_median.jpg", "figures/2c_std.jpg")
+)
+```
+
+
+## d)
+```{r}
+evaluate_updated_besag_and_plot <- function(tau, update, filenames) {
+  # Evaluates the updated besag posterior with Kaduna as an additional sample,
+  #and summarises, and finally plots the data. Relevant for task c and e.
+  # Args:
+  #   tau               (float): Besag hyperparameter
+  #   update             (list): Observation and variance of update
+  #   filenames (length-2 list): Filenames of plots
+  # Returns:
+  #   Model summary
+  # Posterior distribution parameters:
+  A <- diag(1, nrow=38, ncol=37)
+  A[38, 19] <- 1
+  D.tilde.inv <- diag(c(direct_estimates$stdev, update$var)) %>% solve()
+  besag.Sigma <- solve(tau*R + t(A)%*%D.tilde.inv%*%A)
+  besag.mu <- besag.Sigma %*% t(A) %*% D.tilde.inv %*% c(y, update$obs)
+  
+  # Sampling from the distribution
+  besag.samples <- sigmoid(mvrnorm(besag.mu, besag.Sigma, n=100))
+  besag.sum <- realization_summary(besag.samples)
+  
+  plotAreaCol(
+    filenames[1],
+    width=20,
+    height=15,
+    estVal=besag.sum$median.est,
+    geoMap=nigeriaAdm1,
+    leg="median est."
+  )
+  
+  plotAreaCol(
+    filenames[2],
+    width=20,
+    height=15,
+    estVal=besag.sum$std.est,
+    geoMap=nigeriaAdm1,
+    leg=TeX("$\\hat{CV}$")
+  )
+
+  return(besag.sum)
+}
+```
+
+
+```{r}
+besag_updated.sum <- evaluate_updated_besag_and_plot(
+  tau=1.0,
+  update=list(obs=0.5, var=0.1^2),
+  filenames=c("figures/2d_median.jpg", "figures/2d_std.jpg")
+)
+```
+```{r}
+plotAreaCol(
+  "figures/2d_median_diff.jpg",
+  width=20,
+  height=15,
+  estVal=besag_updated.sum$median.est - besag_orig.sum$median.est,
+  geoMap=nigeriaAdm1,
+  leg=TeX("median.diff")
+)
+
+plotAreaCol(
+  "figures/2d_std_diff.jpg",
+  width=20,
+  height=15,
+  estVal=besag_updated.sum$std.est - besag_orig.sum$std.est,
+  geoMap=nigeriaAdm1,
+  leg=TeX("CV.diff")
+)
+```
+
+
+
+## e)
+$\tau = 0.1$
+```{r}
+evaluate_besag_and_plot(
+  tau=0.1,
+  filenames=c("figures/2e_0,1_median.jpg", "figures/2e_0,1_std.jpg")
+)
+```
+
+$\tau = 10$
+```{r}
+evaluate_besag_and_plot(
+  tau=10.0,
+  filenames=c("figures/2e_10_median.jpg", "figures/2e_10_std.jpg")
+)
+```
+
+## f)
+```{r}
+Q_C <- function(tau) {
+  # Precision matrix of a Besag posterior model.
+  # Args:
+  #   tau (float)
+  # Returns:
+  #   Q_C ((nxn) matrix)
+  return(
+    tau*R + D.inv
+  )
+}
+
+mu_C <- function(Q_C) {
+  # Mean of a Besag posterior model.
+  # Args:
+  #   Q_C ((nxn) matrix): Precision matrix of a besag posterior model
+  # Returns:
+  #   mu_C (length-n list)
+  return(
+    solve(Q_C) %*% D.inv %*% y
+  )
+}
+
+log_likelihood <- function(tau) {
+  # Log likelihood function of tau given the data y
+  # The constant is not included, as this is not important to perform an MLE.
+  # Args:
+  #   tau (float)
+  # Returns:
+  #   l(tau; y)
+  Q_C <- Q_C(tau)
+  mu_C <- mu_C(Q_C)
+  return(
+    (36/2)*log(tau) - (tau/2)*t(mu_C) %*% R %*% mu_C - (1/2)*t(y-mu_C) %*% D.inv %*% (y-mu_C) -
+      (1/2)*log(det(Q_C))
+  )
+}
+```
+
+```{r}
+tau_hat <- optimize(log_likelihood, interval=c(0, 10000), maximum=TRUE)$maximum
+```
+
+```{r}
+tau_hat
+```
+
+```{r}
+evaluate_besag_and_plot(
+  tau=tau_hat,
+  filenames=c("figures/2f_median.jpg", "figures/2f_std.jpg")
+)
+```
